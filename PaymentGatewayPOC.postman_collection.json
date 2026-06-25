@@ -1,0 +1,189 @@
+{
+  "info": {
+    "name": "Payment Gateway POC - Module B (Stubs)",
+    "description": "UPI / NEFT / Card provider stubs. Single Spring Boot app on {{baseUrl}}. Run the app (./run.sh) before sending requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "challengeId", "value": "" },
+    { "key": "neftRefId", "value": "PAY-9c1d" }
+  ],
+  "item": [
+    {
+      "name": "UPI",
+      "item": [
+        {
+          "name": "UPI debit - happy path (200 SUCCESS + UTR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Trace-Id", "value": "demo-trace-1" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 1500.00,\n  \"vpa\": \"merchant@bank\",\n  \"refId\": \"PAY-7f3a\"\n}" },
+            "url": { "raw": "{{baseUrl}}/internal/upi/debit", "host": ["{{baseUrl}}"], "path": ["internal", "upi", "debit"] }
+          }
+        },
+        {
+          "name": "UPI admin - read config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/internal/admin/upi/config", "host": ["{{baseUrl}}"], "path": ["internal", "admin", "upi", "config"] }
+          }
+        },
+        {
+          "name": "UPI admin - force 100% failure",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{ \"failureRate\": 100 }" },
+            "url": { "raw": "{{baseUrl}}/internal/admin/upi/config", "host": ["{{baseUrl}}"], "path": ["internal", "admin", "upi", "config"] }
+          }
+        },
+        {
+          "name": "UPI debit - now 503 PROVIDER_UNAVAILABLE",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 10,\n  \"vpa\": \"a@bank\",\n  \"refId\": \"PAY-x\"\n}" },
+            "url": { "raw": "{{baseUrl}}/internal/upi/debit", "host": ["{{baseUrl}}"], "path": ["internal", "upi", "debit"] }
+          }
+        },
+        {
+          "name": "UPI admin - restore (failureRate 0)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{ \"failureRate\": 0 }" },
+            "url": { "raw": "{{baseUrl}}/internal/admin/upi/config", "host": ["{{baseUrl}}"], "path": ["internal", "admin", "upi", "config"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "NEFT",
+      "item": [
+        {
+          "name": "NEFT admin - settle fast (ackDelaySeconds 2)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{ \"ackDelaySeconds\": 2 }" },
+            "url": { "raw": "{{baseUrl}}/internal/admin/neft/config", "host": ["{{baseUrl}}"], "path": ["internal", "admin", "neft", "config"] }
+          }
+        },
+        {
+          "name": "NEFT transfer - accept (202 PROCESSING)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 45000.00,\n  \"ifsc\": \"HDFC0001234\",\n  \"refId\": \"{{neftRefId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/internal/neft/transfer", "host": ["{{baseUrl}}"], "path": ["internal", "neft", "transfer"] }
+          }
+        },
+        {
+          "name": "NEFT status - poll (PROCESSING -> SUCCESS)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/internal/neft/transfer/{{neftRefId}}", "host": ["{{baseUrl}}"], "path": ["internal", "neft", "transfer", "{{neftRefId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Card",
+      "item": [
+        {
+          "name": "Card charge - frictionless (200 SUCCESS / 3DS_PASSED)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 2999.00,\n  \"panToken\": \"tok_4242\",\n  \"refId\": \"PAY-1e7b\"\n}" },
+            "url": { "raw": "{{baseUrl}}/internal/card/charge", "host": ["{{baseUrl}}"], "path": ["internal", "card", "charge"] }
+          }
+        },
+        {
+          "name": "Card admin - force 3DS challenge (challengeRate 100)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{ \"challengeRate\": 100 }" },
+            "url": { "raw": "{{baseUrl}}/internal/admin/card/config", "host": ["{{baseUrl}}"], "path": ["internal", "admin", "card", "config"] }
+          }
+        },
+        {
+          "name": "Card charge - REQUIRES_CHALLENGE (captures challengeId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var j = pm.response.json();",
+                  "if (j.challengeId) {",
+                  "  pm.collectionVariables.set('challengeId', j.challengeId);",
+                  "  console.log('Captured challengeId =', j.challengeId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 500.00,\n  \"panToken\": \"tok_y\",\n  \"refId\": \"PAY-c\"\n}" },
+            "url": { "raw": "{{baseUrl}}/internal/card/charge", "host": ["{{baseUrl}}"], "path": ["internal", "card", "charge"] }
+          }
+        },
+        {
+          "name": "Card challenge - complete (uses {{challengeId}})",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/internal/card/challenge/{{challengeId}}", "host": ["{{baseUrl}}"], "path": ["internal", "card", "challenge", "{{challengeId}}"] }
+          }
+        },
+        {
+          "name": "Card admin - force timeout (504 PROVIDER_TIMEOUT)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{ \"timeoutRate\": 100, \"timeoutMs\": 2500 }" },
+            "url": { "raw": "{{baseUrl}}/internal/admin/card/config", "host": ["{{baseUrl}}"], "path": ["internal", "admin", "card", "config"] }
+          }
+        },
+        {
+          "name": "Card charge - now 504 (timeout)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 10.00,\n  \"panToken\": \"tok_x\",\n  \"refId\": \"PAY-t\"\n}" },
+            "url": { "raw": "{{baseUrl}}/internal/card/charge", "host": ["{{baseUrl}}"], "path": ["internal", "card", "charge"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ops",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/actuator/health", "host": ["{{baseUrl}}"], "path": ["actuator", "health"] }
+          }
+        },
+        {
+          "name": "Prometheus metrics",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/actuator/prometheus", "host": ["{{baseUrl}}"], "path": ["actuator", "prometheus"] }
+          }
+        }
+      ]
+    }
+  ]
+}

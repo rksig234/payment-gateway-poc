@@ -1,0 +1,72 @@
+### Provider stub smoke tests — single app on :8080
+### (IntelliJ HTTP client / VS Code REST Client)
+
+### UPI — happy path
+POST http://localhost:8080/internal/upi/debit
+Content-Type: application/json
+X-Trace-Id: demo-trace-1
+
+{ "amount": 1500.00, "vpa": "merchant@bank", "refId": "PAY-7f3a" }
+
+### UPI — read config knobs
+GET http://localhost:8080/internal/admin/upi/config
+
+### UPI — force 100% failures (drives the circuit breaker in Module A)
+POST http://localhost:8080/internal/admin/upi/config
+Content-Type: application/json
+
+{ "failureRate": 100 }
+
+### UPI — now fails with 503
+POST http://localhost:8080/internal/upi/debit
+Content-Type: application/json
+
+{ "amount": 10, "vpa": "a@bank", "refId": "PAY-x" }
+
+### UPI — restore
+POST http://localhost:8080/internal/admin/upi/config
+Content-Type: application/json
+
+{ "failureRate": 0 }
+
+### NEFT — accept a transfer (202 PROCESSING)
+POST http://localhost:8080/internal/neft/transfer
+Content-Type: application/json
+
+{ "amount": 45000.00, "ifsc": "HDFC0001234", "refId": "PAY-9c1d" }
+
+### NEFT — poll settlement (PROCESSING -> SUCCESS after ackDelay)
+GET http://localhost:8080/internal/neft/transfer/PAY-9c1d
+
+### NEFT — settle fast for a demo (2 seconds)
+POST http://localhost:8080/internal/admin/neft/config
+Content-Type: application/json
+
+{ "ackDelaySeconds": 2 }
+
+### Card — frictionless success (3DS_PASSED)
+POST http://localhost:8080/internal/card/charge
+Content-Type: application/json
+
+{ "amount": 2999.00, "panToken": "tok_4242", "refId": "PAY-1e7b" }
+
+### Card — force a 3DS challenge
+POST http://localhost:8080/internal/admin/card/config
+Content-Type: application/json
+
+{ "challengeRate": 100 }
+
+### Card — charge now returns REQUIRES_CHALLENGE + challengeId
+POST http://localhost:8080/internal/card/charge
+Content-Type: application/json
+
+{ "amount": 500.00, "panToken": "tok_y", "refId": "PAY-c" }
+
+### Card — complete the challenge (paste challengeId from the previous response)
+POST http://localhost:8080/internal/card/challenge/REPLACE_WITH_CHALLENGE_ID
+
+### Card — force timeouts (504 PROVIDER_TIMEOUT)
+POST http://localhost:8080/internal/admin/card/config
+Content-Type: application/json
+
+{ "timeoutRate": 100, "timeoutMs": 2500 }

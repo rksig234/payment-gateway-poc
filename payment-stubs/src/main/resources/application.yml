@@ -1,0 +1,40 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: payment-gateway-poc
+
+# Provider-stub config knobs. Deck ranges noted; override any of these at runtime via
+# POST /internal/admin/{upi|neft|card}/config (no restart needed).
+stub:
+  upi:
+    latency-ms: 300          # deck 200-800
+    failure-rate: 0          # deck 0-100%
+  neft:
+    ack-delay-min: 5         # deck 5-120 (minutes)
+    batch-window: 30         # deck 30m (conceptual cadence)
+    ack-delay-seconds: 30    # demo override: if > 0, replaces ack-delay-min
+    batch-scan-ms: 1000      # how often the settler runs
+  card:
+    timeout-rate: 0          # deck 0-15%
+    challenge-rate: 0        # deck 0-30%
+    timeout-ms: 2500         # how long a simulated timeout hangs (> breaker slow-call 2s)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  pattern:
+    # traceId / refId come from the shared TraceIdFilter via MDC.
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [trace=%X{traceId:-} ref=%X{refId:-}] %logger{32} - %msg%n"
+# To emit JSON logs as required by the observability contract, uncomment:
+#  structured:
+#    format:
+#      console: ecs

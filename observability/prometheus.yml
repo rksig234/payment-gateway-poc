@@ -1,0 +1,15 @@
+# Prometheus scrapes each app's /actuator/prometheus endpoint over the compose network.
+# If you run the apps on the host instead, change targets to host.docker.internal:<port>.
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: payment-platform
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["payment-platform:8090"]
+
+  - job_name: payment-stubs
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["payment-stubs:8080"]
