@@ -11,10 +11,6 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
   ECR_NAMESPACE: payment-gateway
 
-permissions:
-  contents: read
-  id-token: write   # for AWS OIDC
-
 jobs:
   build-test:
     name: Build & test
