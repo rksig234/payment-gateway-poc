@@ -11,17 +11,23 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
   ECR_NAMESPACE: payment-gateway
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     name: Build & test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
+
       - name: Build, unit + integration tests
         run: mvn -B verify
 
@@ -30,56 +36,86 @@ jobs:
     needs: build-test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         include:
-          - { module: payment-stubs, port: 8080 }
-          - { module: payment-platform, port: 8090 }
+          - module: payment-stubs
+            port: 8080
+          - module: payment-platform
+            port: 8090
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Login to ECR
+
+      - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
+
       - name: Ensure ECR repository exists
         run: |
           aws ecr describe-repositories --repository-names "${ECR_NAMESPACE}/${{ matrix.module }}" \
-            || aws ecr create-repository --repository-name "${ECR_NAMESPACE}/${{ matrix.module }}"
-      - name: Build & push image
+          || aws ecr create-repository --repository-name "${ECR_NAMESPACE}/${{ matrix.module }}"
+
+      - name: Build & Push Docker Image
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           IMAGE="${REGISTRY}/${ECR_NAMESPACE}/${{ matrix.module }}"
+
           docker build \
             --build-arg MODULE=${{ matrix.module }} \
             --build-arg PORT=${{ matrix.port }} \
-            -t "${IMAGE}:${{ github.sha }}" -t "${IMAGE}:latest" .
+            -t "${IMAGE}:${{ github.sha }}" \
+            -t "${IMAGE}:latest" .
+
           docker push "${IMAGE}:${{ github.sha }}"
           docker push "${IMAGE}:latest"
 
   deploy:
-    name: Terraform plan & apply
+    name: Terraform Plan & Apply
     needs: docker-build-push
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production   # GitHub Environment = manual approval gate
+
+    environment: production
+
     defaults:
       run:
         working-directory: infra/envs/poc
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - uses: hashicorp/setup-terraform@v3
-      - run: terraform init
-      - run: terraform plan -var="image_tag=${{ github.sha }}" -out=tfplan
-      - run: terraform apply -auto-approve tfplan
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+        run: |
+          terraform plan \
+            -var="image_tag=${{ github.sha }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+        run: terraform apply -auto-approve tfplan
